@@ -1,0 +1,15 @@
+# Upstream files this fork edits. A sync can only conflict here.
+# One path per line; used by sync-upstream.sh to print what needs a human.
+internal/agents/config/layout.go
+internal/agents/ticket/ticket.go
+internal/agents/ticketprompt/pointer.go
+internal/agents/ticketprompt/pointer_test.go
+internal/pkg/api/server.go
+internal/tools/agents/handler.go
+internal/tools/agents/spa_handler.go
+internal/tools/agents/view/layout.templ
+internal/tools/agents/view/nav_more.go
+fe/package.json
+fe/scripts/dev.mjs
+AGENTS.md
+docs/.vitepress/config.ts
