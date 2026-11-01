@@ -31,7 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       UPSTREAM_REPO: https://github.com/yogasw/wick.git
-      UPSTREAM_BRANCH: ${{ inputs.upstream_branch || 'develop' }}
+      # github.event.inputs is empty on schedule; the fallback keeps the
+      # workflow valid for both triggers.
+      UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'develop' }}
       SYNC_BRANCH: ci/upstream-sync
 
     steps:
