@@ -1,0 +1,146 @@
+name: upstream-sync
+
+# Local-only workflow (not upstreamed). It merges the central repo into a
+# throwaway branch on top of OUR master, builds it, and opens a PR when the
+# merge is clean. A conflict fails the run and names the seam files from
+# local/seams.txt.
+#
+# See local/README.md.
+
+on:
+  schedule:
+    # Mondays 01:00 UTC — after the central repo's weekend work, before ours.
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: "Central branch to absorb"
+        required: false
+        default: develop
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM_REPO: https://github.com/yogasw/wick.git
+      UPSTREAM_BRANCH: ${{ inputs.upstream_branch || 'develop' }}
+      SYNC_BRANCH: ci/upstream-sync
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Add the central remote
+        run: |
+          git remote add upstream "$UPSTREAM_REPO" 2>/dev/null || git remote set-url upstream "$UPSTREAM_REPO"
+          git fetch --no-tags upstream "$UPSTREAM_BRANCH"
+
+      - name: Count what is missing
+        id: gap
+        run: |
+          behind="$(git rev-list --count HEAD..upstream/$UPSTREAM_BRANCH)"
+          echo "behind=$behind" >> "$GITHUB_OUTPUT"
+          echo "$behind commit(s) on upstream/$UPSTREAM_BRANCH not in master"
+
+      - name: Nothing to absorb
+        if: steps.gap.outputs.behind == '0'
+        run: echo "master already contains upstream/$UPSTREAM_BRANCH"
+
+      - name: Merge into a trial branch
+        if: steps.gap.outputs.behind != '0'
+        run: |
+          git switch -C "$SYNC_BRANCH"
+          git config user.name "wick upstream sync"
+          git config user.email "upstream-sync@users.noreply.github.com"
+
+          if git merge --no-ff --no-edit "upstream/$UPSTREAM_BRANCH"; then
+            exit 0
+          fi
+
+          echo "::error::conflict merging upstream/$UPSTREAM_BRANCH into master"
+          # Classify every conflict: a seam is expected and cheap, anything
+          # else means upstream moved a file this fork appends to.
+          git diff --name-only --diff-filter=U | while IFS= read -r f; do
+            if grep -qxF "$f" local/seams.txt; then
+              echo "::warning file=$f::seam conflict — resolve per local/README.md"
+            else
+              echo "::error file=$f::UNEXPECTED conflict — upstream changed a file we append to"
+            fi
+          done
+          exit 1
+
+      - name: Set up Go
+        if: steps.gap.outputs.behind != '0'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        if: steps.gap.outputs.behind != '0'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: fe/package-lock.json
+
+      - name: Install templ (pinned to go.mod)
+        if: steps.gap.outputs.behind != '0'
+        run: |
+          version="$(go list -m -f '{{.Version}}' github.com/a-h/templ)"
+          go install "github.com/a-h/templ/cmd/templ@${version}"
+
+      - name: Build the SPAs the binary embeds
+        if: steps.gap.outputs.behind != '0'
+        working-directory: fe
+        run: |
+          npm ci
+          npm run build
+
+      - name: Generate templ + build
+        if: steps.gap.outputs.behind != '0'
+        run: |
+          templ generate ./...
+          go build ./internal/... ./cmd/... ./pkg/...
+
+      - name: Fast, fork-relevant tests
+        if: steps.gap.outputs.behind != '0'
+        run: |
+          go test ./internal/agents/plan \
+                  ./internal/agents/ticket \
+                  ./internal/agents/ticketprompt \
+                  ./internal/agents/skillsync
+
+      - name: Push the trial branch
+        if: steps.gap.outputs.behind != '0'
+        run: git push --force origin "$SYNC_BRANCH"
+
+      - name: Open or refresh the sync PR
+        if: steps.gap.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="chore: sync upstream $(date -u +%Y-%m-%d)"
+          body="$(printf '%s\n' \
+            "Automated merge of \`$UPSTREAM_REPO\` \`$UPSTREAM_BRANCH\` into \`master\`." \
+            "" \
+            "Built with templ + all SPA bundles, then the plan/ticket/ticketprompt/skillsync tests passed." \
+            "A conflict here is a seam — see \`local/seams.txt\` and \`local/README.md\`." \
+            "" \
+            "Merge only after reviewing the seam diff: \`git diff master...$SYNC_BRANCH -- \$(cat local/seams.txt)\`")"
+          number="$(gh pr list --head "$SYNC_BRANCH" --json number --jq '.[0].number')"
+          if [ -z "$number" ]; then
+            gh pr create --base master --head "$SYNC_BRANCH" --title "$title" --body "$body"
+          else
+            gh pr edit "$number" --title "$title" --body "$body"
+          fi

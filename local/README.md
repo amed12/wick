@@ -71,6 +71,22 @@ git fetch origin --prune && git fetch upstream --prune
 If `upstream` is absent, the script falls back to `origin` — but with `origin`
 pointing at the fork, that would sync the fork, not the central repo, so keep both.
 
+### CI
+
+`.github/workflows/upstream-sync.yml` runs the same merge on a schedule
+(Mondays 01:00 UTC) and on demand:
+
+- merges `upstream/develop` into a throwaway `ci/upstream-sync` branch on top of
+  `master` (never into `master` directly),
+- on conflict, fails and annotates every conflicted file as `seam` or
+  `UNEXPECTED`,
+- on success, builds templ + all SPA bundles + the Go binary, runs the
+  plan/ticket tests, pushes the branch and opens/refreshes a PR.
+
+Scheduled workflows on a fork can be disabled by default — enable **Actions** on
+`amed12/wick` once. The token only writes branches and PRs inside the fork; the
+central remote is fetch-only.
+
 ## Seams — the only files a sync can conflict with
 
 Everything else we add is a new file or directory. `local/seams.txt` lists the
