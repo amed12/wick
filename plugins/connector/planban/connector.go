@@ -22,12 +22,14 @@ type boardStateInput struct {
 }
 
 type findCardsInput struct {
-	Query     string `wick:"desc=Case-insensitive substring matched against title, summary and topic."`
-	Shortcode string `wick:"desc=Instagram shortcode stored in metadata.instagramShortcode."`
-	Group     string `wick:"desc=Group (column parent) title, case-insensitive. Example: Claude dan Claude Code"`
-	Status    string `wick:"dropdown=pending|up-next|in-progress|complete|archived;desc=Only cards in this status."`
-	Limit     int    `wick:"desc=Maximum cards returned. Default 50, max 500."`
-	RepoID    string `wick:"desc=Override the configured board repoId."`
+	Query         string `wick:"desc=Case-insensitive substring matched against title, summary and topic."`
+	Shortcode     string `wick:"desc=Instagram shortcode stored in metadata.instagramShortcode."`
+	Group         string `wick:"desc=Group (column parent) title, case-insensitive. Example: Claude dan Claude Code"`
+	Status        string `wick:"dropdown=pending|up-next|in-progress|complete|archived;desc=Only cards in this status."`
+	MetadataKey   string `wick:"desc=Only cards whose metadata[key] equals metadata_value. Example: analysisStatus"`
+	MetadataValue string `wick:"desc=Value metadata_key must equal. Example: pending"`
+	Limit         int    `wick:"desc=Maximum cards returned. Default 50, max 500."`
+	RepoID        string `wick:"desc=Override the configured board repoId."`
 }
 
 type upsertCardInput struct {
@@ -53,6 +55,19 @@ type moveCardInput struct {
 	Group  string `wick:"desc=Target group title. The group must already exist."`
 	Status string `wick:"dropdown=pending|up-next|in-progress|complete|archived;desc=Target status."`
 	RepoID string `wick:"desc=Override the configured board repoId."`
+}
+
+type setMetadataInput struct {
+	CardID   string `wick:"required;desc=Card id whose metadata is updated."`
+	Metadata string `wick:"required;desc=JSON object string merged into the card's metadata. Existing keys survive unless overridden here."`
+	RepoID   string `wick:"desc=Override the configured board repoId."`
+}
+
+type writeDocInput struct {
+	CardID   string `wick:"required;desc=Card id whose document is written."`
+	Kind     string `wick:"dropdown=spec|plan;desc=Which document to write. Default spec."`
+	Markdown string `wick:"textarea;required;desc=Full markdown body. It replaces the document — read it first (find_cards returns no doc body, so pass the whole text you want stored)."`
+	RepoID   string `wick:"desc=Override the configured board repoId."`
 }
 
 type deleteCardInput struct {
@@ -92,6 +107,12 @@ func Module() connector.Module {
 				connector.Op("move_card", "Move Card",
 					"Move a card to another group and/or status. Requires at least one of group or status.",
 					moveCardInput{}, handleMoveCard, wickdocs.Docs{}),
+				connector.Op("set_metadata", "Set Card Metadata",
+					"Merge a JSON object into one card's metadata. Use it for bookkeeping flags (analysis status, transcript path) without touching the title or documents.",
+					setMetadataInput{}, handleSetMetadata, wickdocs.Docs{}),
+				connector.Op("write_doc", "Write Card Document",
+					"Replace a card's spec or plan document with new markdown. Use it to attach an analysis (transcript, notes) to the card so the board carries the evidence.",
+					writeDocInput{}, handleWriteDoc, wickdocs.Docs{}),
 				connector.OpDestructive("delete_card", "Delete Card",
 					"Permanently delete a card. Irreversible — the card's notes stay on disk but the board entry is gone. Disabled by default on every new instance.",
 					deleteCardInput{}, handleDeleteCard, wickdocs.Docs{}),

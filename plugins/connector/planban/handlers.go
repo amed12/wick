@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/yogasw/wick/pkg/connector"
@@ -53,6 +55,8 @@ func handleFindCards(c *connector.Ctx) (any, error) {
 	code := strings.TrimSpace(c.Input("shortcode"))
 	status := strings.TrimSpace(c.Input("status"))
 	groupFilter := strings.TrimSpace(c.Input("group"))
+	metaKey := strings.TrimSpace(c.Input("metadata_key"))
+	metaValue := strings.TrimSpace(c.Input("metadata_value"))
 	limit := c.InputInt("limit")
 	if limit <= 0 {
 		limit = 50
@@ -80,6 +84,9 @@ func handleFindCards(c *connector.Ctx) (any, error) {
 			continue
 		}
 		if groupID != "" && (card.ParentID == nil || *card.ParentID != groupID) {
+			continue
+		}
+		if metaKey != "" && asMetaString(card.Metadata[metaKey]) != metaValue {
 			continue
 		}
 		if code != "" && shortcodeOf(card) != code {
@@ -328,6 +335,11 @@ func handleDeleteCard(c *connector.Ctx) (any, error) {
 	return map[string]any{"board": repo, "deleted": true, "card_id": id}, nil
 }
 
+func asMetaString(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
 // slugID mirrors Planban's card-id derivation, used only as a fallback lookup
 // immediately after a create.
 func slugID(title string) string {
@@ -347,4 +359,64 @@ func slugID(title string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
+}
+
+// handleWriteDoc replaces one card document. Planban's PUT is a full replace, so
+// the caller supplies the whole body.
+func handleWriteDoc(c *connector.Ctx) (any, error) {
+	cl, repo, err := clientFor(c, c.Input("repo_id"))
+	if err != nil {
+		return nil, err
+	}
+	id := strings.TrimSpace(c.Input("card_id"))
+	if id == "" {
+		return nil, fmt.Errorf("card_id is required")
+	}
+	kind := strings.TrimSpace(c.Input("kind"))
+	if kind == "" {
+		kind = "spec"
+	}
+	if kind != "spec" && kind != "plan" {
+		return nil, fmt.Errorf("kind must be spec or plan")
+	}
+	markdown := c.Input("markdown")
+	if strings.TrimSpace(markdown) == "" {
+		return nil, fmt.Errorf("markdown is required")
+	}
+	var out map[string]any
+	err = cl.do(http.MethodPut, boardPath(repo, "/cards/"+url.PathEscape(id)+"/docs/"+kind),
+		map[string]any{"markdown": markdown}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"board": repo, "card_id": id, "kind": kind, "written": true, "path": out["path"]}, nil
+}
+
+// handleSetMetadata merges metadata into one card, keyed by card id so cards
+// without an external shortcode can still be updated.
+func handleSetMetadata(c *connector.Ctx) (any, error) {
+	cl, repo, err := clientFor(c, c.Input("repo_id"))
+	if err != nil {
+		return nil, err
+	}
+	id := strings.TrimSpace(c.Input("card_id"))
+	if id == "" {
+		return nil, fmt.Errorf("card_id is required")
+	}
+	cards, err := cl.cards(repo)
+	if err != nil {
+		return nil, err
+	}
+	target := findCardByID(cards, id)
+	if target == nil {
+		return nil, fmt.Errorf("card %q not found on board %s", id, repo)
+	}
+	merged, err := mergeMetadata(target.Metadata, c.Input("metadata"))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := cl.patchCard(repo, id, map[string]any{"metadata": merged}); err != nil {
+		return nil, err
+	}
+	return finish(cl, repo, id, "metadata_updated")
 }
