@@ -7,6 +7,7 @@ import (
 
 	"github.com/yogasw/wick/internal/agents/config"
 	"github.com/yogasw/wick/internal/agents/notes"
+	"github.com/yogasw/wick/internal/agents/plan"
 	"github.com/yogasw/wick/internal/agents/project"
 	"github.com/yogasw/wick/internal/agents/session"
 	"github.com/yogasw/wick/internal/agents/ticket"
@@ -176,6 +177,40 @@ func TestPointerForLooseSessionWithNotes(t *testing.T) {
 	}
 	if strings.Contains(got, "ticket T-") {
 		t.Fatalf("pointer named a ticket for a loose session:\n%s", got)
+	}
+}
+
+// A ticket that belongs to a plan carries the phase and its done-when
+// contract, so an agent working from a bare ticket knows the goal.
+func TestPointerIncludesPlanAndAcceptance(t *testing.T) {
+	l := setup(t)
+	mkSession(t, l, "s1", "p1")
+	p, err := plan.Create(l, plan.CreateOptions{
+		ProjectID: "p1",
+		Title:     "MVP kasir",
+		Summary:   "Kasir warung",
+		PRD:       "# PRD\n\nCatat penjualan dan stok.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tk, err := ticket.Create(l, ticket.CreateOptions{
+		ProjectID:  "p1",
+		Title:      "Form transaksi",
+		PlanID:     p.ID,
+		Acceptance: "- [ ] transaksi tersimpan",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ticket.AttachSession(l, "p1", tk.ID, "s1"); err != nil {
+		t.Fatal(err)
+	}
+	got := Pointer(l, "s1")
+	for _, want := range []string{"## Plan 1 — MVP kasir", "Kasir warung", "Catat penjualan", "Done when", "transaksi tersimpan"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("pointer missing %q:\n%s", want, got)
+		}
 	}
 }
 

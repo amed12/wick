@@ -46,6 +46,8 @@ const WORKSPACES = {
   "agents/conversation": "@wick-fe/agents-conversation",
   "agents/new-session": "@wick-fe/agents-new-session",
   "agents/overview": "@wick-fe/agents-overview",
+  // LOCAL(plans): planning workspace SPA.
+  "agents/plan": "@wick-fe/agents-plan",
   "agents/presets": "@wick-fe/agents-presets",
   "agents/project-settings": "@wick-fe/agents-project-settings",
   "agents/providers": "@wick-fe/agents-providers",

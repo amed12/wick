@@ -259,6 +259,7 @@ func Register(r tool.Router) {
 
 	// Svelte SPA shell + assets for the workflow editor.
 	registerSPA(r)
+	registerSPAPlan(r)
 	registerSPAWorkflows(r)
 	registerSPAWorkflowHistory(r)
 	registerSPAPanels(r)
@@ -499,6 +500,10 @@ func Register(r tool.Router) {
 	r.GET("/api/projects/{id}/files/mentions", projectFileMentions)
 	r.POST("/api/projects/{id}", projectOwnerMW(apiProjectUpdate))
 
+	// LOCAL(plans): every route of the planning workspace, in one call so
+	// this file's diff against upstream stays a single line. See local/README.md.
+	registerPlanRoutes(r)
+
 	// JSON API — tickets. A ticket is its own entity holding many
 	// sessions, so the board and creation sit under a project (covered by
 	// projectAccessMW) while a single ticket is addressed by its own id;
@@ -670,6 +675,8 @@ func Register(r tool.Router) {
 	r.GET("/providers/options/{type}/{name}/models", providerOptionModelsJSON)
 	r.GET("/presets/options", presetOptionsJSON)
 	r.GET("/projects/{id}", projectSettingsPage) // owner-only inside, rendered as a page
+	// LOCAL(plans): the planning workspace page + JSON API are registered
+	// together in api_plans.go. See the call above.
 	r.POST("/projects", createProject)
 	r.POST("/projects/{id}", projectOwnerMW(updateProject))
 	r.POST("/projects/{id}/pin", toggleProjectPin)
@@ -3133,6 +3140,19 @@ func toggleProjectPin(c *tool.Ctx) {
 		return
 	}
 	c.JSON(http.StatusOK, map[string]any{"status": "ok", "pinned": pinned != "", "project_id": pinned})
+}
+
+// planPage renders the planning workspace SPA shell. The project and plan
+// are chosen inside the SPA, so the shell itself carries no ids.
+func planPage(c *tool.Ctx) {
+	if notReady(c) {
+		return
+	}
+	c.HTML(view.PlanSPA(view.PlanSPAVM{
+		Layout:   sidebarVM(c, "plan", ""),
+		Base:     c.Base(),
+		AssetURL: spaAssetURL("plan"),
+	}))
 }
 
 // projectSettingsPage renders the project-settings SPA shell for an existing

@@ -36,6 +36,11 @@ func AgentsMoreItems(vm AgentsLayoutVM, user *entity.User) []AgentsNavItem {
 		show        bool
 	}
 	candidates := []candidate{
+		// LOCAL(plans): one nav entry. Delete this block with the feature.
+		// Planning workspace: the PRD, roadmap and feature/task breakdown
+		// that an agent executes from. Kept beside Workflows because both
+		// are "how work gets done", not chat.
+		{"/plan", "Plans", true},
 		// Workflows sat in the main nav; it moved here so the top rows are
 		// the everyday ones (New session · Overview · Team · Connectors).
 		{"/workflows", "Workflows", true},

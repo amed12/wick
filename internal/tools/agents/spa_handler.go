@@ -36,6 +36,29 @@ func registerSPA(r tool.Router) {
 	})
 }
 
+// LOCAL(plans): the planning workspace SPA mount. Appended, never edited by
+// upstream.
+// planSPAPrefix is the planning workspace's own mount, separate from the
+// workflow tree so its URL is short (/tools/agents/plan/<planID>).
+const planSPAPrefix = "/plan/"
+
+// registerSPAPlan wires the planning SPA shell + assets. It reuses the
+// multi-app spaHandler by prepending the app segment the shared handler
+// expects, so adding this app did not fork the serving logic.
+func registerSPAPlan(r tool.Router) {
+	mount := strings.TrimSuffix(r.Meta().Path+planSPAPrefix, "/")
+	r.HandleRaw(planSPAPrefix, func(_ tool.ConfigReader) http.Handler {
+		return http.StripPrefix(mount, http.HandlerFunc(planSPAHandler))
+	})
+}
+
+func planSPAHandler(w http.ResponseWriter, r *http.Request) {
+	p := strings.TrimPrefix(r.URL.Path, "/")
+	r2 := r.Clone(r.Context())
+	r2.URL.Path = "/plan/" + p
+	spaHandler(w, r2)
+}
+
 // spaHandler serves /assets/* from the embed and any other path with
 // the matching app's index.html. The Vite config bakes the SPA's base
 // URL as `/tools/workflow/<app>/` so asset references in index.html

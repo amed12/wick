@@ -1,0 +1,28 @@
+package view
+
+// PlanSPAVM feeds the thin shell that hosts the planning workspace SPA.
+// AssetURL is the hashed Vite bundle path resolved at boot via
+// spaAssetURL("plan").
+type PlanSPAVM struct {
+	Layout   AgentsLayoutVM
+	Base     string
+	AssetURL string
+}
+
+// PlanSPA renders the planning SPA shell inside the agents chrome. The SPA
+// reads data-base from the #app div and resolves the project/plan from the
+// URL itself.
+templ PlanSPA(vm PlanSPAVM) {
+	@AgentsLayout(vm.Layout) {
+		if vm.AssetURL == "" {
+			<div class="p-8 text-sm text-rose-600 dark:text-rose-400">
+				Plan bundle not built yet. Run
+				<code class="font-mono">npm --workspace=@wick-fe/agents-plan run build</code>
+				in <code class="font-mono">fe/</code> and refresh.
+			</div>
+		} else {
+			<div id="app" data-base={ vm.Base } class="h-full"></div>
+			<script type="module" src={ vm.AssetURL }></script>
+		}
+	}
+}

@@ -40,6 +40,7 @@ import (
 	"github.com/yogasw/wick/internal/agents/gate"
 	agentgate "github.com/yogasw/wick/internal/agents/gate"
 	agentnotes "github.com/yogasw/wick/internal/agents/notes"
+	"github.com/yogasw/wick/internal/agents/plan"
 	agentpool "github.com/yogasw/wick/internal/agents/pool"
 	agentproject "github.com/yogasw/wick/internal/agents/project"
 	"github.com/yogasw/wick/internal/agents/promptguard"
@@ -87,6 +88,7 @@ import (
 	dtconn "github.com/yogasw/wick/internal/connectors/datatables"
 	notesconn "github.com/yogasw/wick/internal/connectors/notes"
 	"github.com/yogasw/wick/internal/connectors/notifications"
+	plansconn "github.com/yogasw/wick/internal/connectors/plans"
 	connplugin "github.com/yogasw/wick/internal/connectors/plugin"
 	sourceconn "github.com/yogasw/wick/internal/connectors/source"
 	subagents "github.com/yogasw/wick/internal/connectors/sub-agents"
@@ -2032,6 +2034,11 @@ func NewServer() *Server {
 	connectors.Register(ticketconn.Module(agentsLayout))
 	connectors.Register(notesconn.Module(agentsLayout))
 	connectors.Register(sourceconn.Module(agentsLayout))
+	// LOCAL(plans): the plans connector. Remove with the feature.
+	// Plans own the PRD and the feature/task breakdown; the tickets they
+	// create stay in the tickets connector so an agent updates progress
+	// the same way it always has.
+	connectors.Register(plansconn.Module(agentsLayout))
 
 	// Notes follow their session when it changes ticket. Wired as a hook
 	// because internal/agents/notes already imports internal/agents/ticket
@@ -2183,6 +2190,10 @@ func NewServer() *Server {
 	// "agent-persona": the Team app's New agent brief and Settings ›
 	// Persona Generate / Improve.
 	aigenSvc.Register(team.PersonaKindSpec())
+	// LOCAL(plans): aigen kind for the planning workspace.
+	// "plan-prd": the planning workspace's Generate button. One call returns
+	// the PRD and the feature/task breakdown it decomposes into.
+	aigenSvc.Register(plan.PRDKindSpec())
 	aigenHandler := aigen.NewHandler(aigenSvc)
 	bootClk.mark("custom connector service ready")
 	if err := customConnSvc.RegisterAllAtBoot(context.Background()); err != nil {

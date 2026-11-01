@@ -13,6 +13,7 @@ import (
 
 	"github.com/yogasw/wick/internal/agents/config"
 	"github.com/yogasw/wick/internal/agents/notes"
+	"github.com/yogasw/wick/internal/agents/plan"
 	"github.com/yogasw/wick/internal/agents/session"
 	"github.com/yogasw/wick/internal/agents/ticket"
 )
@@ -21,6 +22,15 @@ import (
 // prompt. Enough for repro steps and links to register; anything longer is
 // a document, and documents are read through ticket_get.
 const bodyExcerptLen = 600
+
+// planExcerptLen bounds the PRD slice in the prompt. A plan document is
+// the one thing an agent must not guess about, so it gets more room than
+// a ticket body — but still a fixed slice, not the whole file.
+const planExcerptLen = 2400
+
+// acceptanceExcerptLen bounds the done-when contract. Criteria are short
+// by construction; the cap only stops a pasted document.
+const acceptanceExcerptLen = 1200
 
 // excerpt returns at most n bytes of s, cut on a rune boundary via the
 // trailing-space trim, with surrounding whitespace dropped.
@@ -81,6 +91,29 @@ func Pointer(layout config.Layout, sessionID string) string {
 	}
 
 	var b strings.Builder
+	// LOCAL(plans): the plan excerpt + done-when contract. Everything else
+	// in this function is upstream's ticket/notes pointer.
+	// The plan is written before the ticket section: an agent that knows
+	// which phase it is in reads the task in the right frame. The document
+	// is excerpted — the full PRD is one plan_get away, and inlining it
+	// would charge the whole document on every turn of every session.
+	if hasTicket && tk.PlanID != "" {
+		if p, perr := plan.Load(layout, tk.ProjectID, tk.PlanID); perr == nil {
+			fmt.Fprintf(&b, "## Plan %d — %s\n\n", p.Number, p.Title)
+			if p.Summary != "" {
+				fmt.Fprintf(&b, "%s\n\n", p.Summary)
+			}
+			if prd := excerpt(p.PRD, planExcerptLen); prd != "" {
+				fmt.Fprintf(&b, "The PRD this ticket belongs to (excerpt):\n\n%s\n\n", prd)
+				if len(p.PRD) > planExcerptLen {
+					b.WriteString("(truncated — use the plans connector's plan_get for the full document and the other tasks.)\n\n")
+				}
+			}
+		}
+	}
+	if hasTicket && tk.Acceptance != "" {
+		fmt.Fprintf(&b, "Done when:\n\n%s\n\n", excerpt(tk.Acceptance, acceptanceExcerptLen))
+	}
 	b.WriteString("## Ticket and notes\n\n")
 	if hasTicket {
 		fmt.Fprintf(&b, "This session is working on ticket %s", tk.ID)
