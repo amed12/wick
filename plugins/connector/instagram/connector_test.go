@@ -53,6 +53,20 @@ func TestExtractTemplatePicksTheCollectionQuery(t *testing.T) {
 	}
 }
 
+func TestExtractTemplatePrefersConnectionQuery(t *testing.T) {
+	requests := []any{
+		map[string]any{"method": "POST", "body": "doc_id=1&variables=%7B%22collection_id%22%3A%227%22%7D&friendly=PolarisSavedCollectionPageWWWQuery"},
+		map[string]any{"method": "POST", "body": "doc_id=2&variables=%7B%22collection_id%22%3A%227%22%7D&friendly=PolarisSavedCollectionPageWWWQuery_connection"},
+	}
+	got, err := extractTemplate(requests, "7")
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if !strings.Contains(got, "doc_id=2") {
+		t.Errorf("want the connection query (doc_id=2), got %q", got)
+	}
+}
+
 func TestExtractTemplateFailsLoudly(t *testing.T) {
 	if _, err := extractTemplate([]any{map[string]any{"method": "POST", "body": "hello=1"}}, "42"); err == nil {
 		t.Fatal("want an error when no collection query was recorded")
@@ -68,6 +82,22 @@ func TestHarvestScriptCarriesInputs(t *testing.T) {
 	}
 	if strings.Contains(script, "after = \"\"") {
 		t.Error("empty cursor must render as null, not an empty string")
+	}
+}
+
+func TestRunFailureIgnoresOutputlessSteps(t *testing.T) {
+	run := map[string]any{"steps": []any{
+		map[string]any{"action": "eval", "ok": true, "output": map[string]any{"navigating": true}},
+		map[string]any{"action": "wait", "ok": true},
+	}}
+	if err := runFailure(run); err != nil {
+		t.Fatalf("a wait step with no output is not a failure: %v", err)
+	}
+	bad := map[string]any{"steps": []any{
+		map[string]any{"action": "scroll", "ok": false, "error": "tab closed"},
+	}}
+	if err := runFailure(bad); err == nil || !strings.Contains(err.Error(), "tab closed") {
+		t.Fatalf("want the failed step surfaced, got %v", err)
 	}
 }
 

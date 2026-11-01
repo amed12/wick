@@ -2,6 +2,17 @@ package main
 
 import "fmt"
 
+// navScript navigates without waiting for the page's load event.
+//
+// Instagram's load event can take longer than the browser plugin's hard 45s
+// per-run ceiling (a fresh profile pulls a large bundle plus long-poll
+// connections), and a goto that waits for it fails every time. Firing the
+// assignment and waiting a fixed beat is both faster and immune to that cap; the
+// eval probe that follows reads whatever state the page reached.
+func navScript(rawURL string) string {
+	return fmt.Sprintf("(() => { location.assign(%q); return {navigating: true}; })()", rawURL)
+}
+
 // probeScript reports what the current Instagram page looks like. Used by
 // login_status: a logged-out session lands on /accounts/login/ and offers a
 // "Log in" link instead of the saved grid.

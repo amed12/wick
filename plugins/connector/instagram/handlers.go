@@ -59,8 +59,8 @@ func handleLoginStatus(c *connector.Ctx) (any, error) {
 		return nil, err
 	}
 	run, err := runSteps(c.Context(), inst, sid, []map[string]any{
-		{"action": "goto", "url": savedURL(cfg.username)},
-		{"action": "wait", "ms": 2500},
+		{"action": "eval", "script": navScript(savedURL(cfg.username))},
+		{"action": "wait", "ms": 5000},
 		{"action": "eval", "script": probeScript},
 	}, nil)
 	if err != nil {
@@ -149,24 +149,27 @@ func handleCollection(c *connector.Ctx) (any, error) {
 // discoverTemplate records one page load and lifts the GraphQL body out of it.
 func discoverTemplate(ctx context.Context, inst, sid string, cfg connConfig, slug, id string) (string, error) {
 	run, err := runSteps(ctx, inst, sid, []map[string]any{
-		{"action": "goto", "url": collectionURL(cfg.username, slug, id)},
-		{"action": "wait", "ms": 3000},
-		{"action": "scroll", "delta_y": 2500},
-		{"action": "wait", "ms": 1200},
+		{"action": "eval", "script": navScript(collectionURL(cfg.username, slug, id))},
+		{"action": "wait", "ms": 6000},
+		{"action": "scroll", "delta_y": 3000},
+		{"action": "wait", "ms": 2500},
+		{"action": "scroll", "delta_y": 3000},
+		{"action": "wait", "ms": 2500},
 	}, map[string]any{
 		"record_request":        true,
-		"record_url_pattern":    "api/graphql",
+		"record_name":           captureName(id),
+		"record_url_pattern":    "graphql",
 		"record_include_assets": false,
 	})
 	if err != nil {
 		return "", err
 	}
-	if _, err := lastStepOutput(run); err != nil {
+	if err := runFailure(run); err != nil {
 		return "", err
 	}
-	// A capture made under a named profile is stored under that profile, so ask
-	// by profile rather than by record name.
-	cap, err := execOp(ctx, inst, "get_request", map[string]any{"profile": cfg.profile})
+	// The capture is keyed by record_name (not by profile), so ask for exactly
+	// the name this discovery pass recorded under.
+	cap, err := execOp(ctx, inst, "get_request", map[string]any{"name": captureName(id)})
 	if err != nil {
 		return "", err
 	}
@@ -202,8 +205,8 @@ func handlePost(c *connector.Ctx) (any, error) {
 		return nil, err
 	}
 	run, err := runSteps(c.Context(), inst, sid, []map[string]any{
-		{"action": "goto", "url": target},
-		{"action": "wait", "ms": 2000},
+		{"action": "eval", "script": navScript(target)},
+		{"action": "wait", "ms": 4000},
 		{"action": "eval", "script": postScript},
 	}, nil)
 	if err != nil {

@@ -120,6 +120,21 @@ func evalOutput(ctx context.Context, instance, sid, script string) (map[string]a
 	return lastStepOutput(run)
 }
 
+// runFailure reports the first failed step of a run, or nil when every step
+// succeeded. Used where the last action has no meaningful output (wait, scroll).
+func runFailure(run map[string]any) error {
+	for _, raw := range asSlice(run["steps"]) {
+		st := asMap(raw)
+		if st == nil {
+			continue
+		}
+		if ok, _ := st["ok"].(bool); !ok {
+			return fmt.Errorf("browser step %q failed: %s", asString(st["action"]), asString(st["error"]))
+		}
+	}
+	return nil
+}
+
 // lastStepOutput digs the final step's output out of a run result and turns a
 // failed step into a readable error instead of a silent zero value.
 func lastStepOutput(run map[string]any) (map[string]any, error) {

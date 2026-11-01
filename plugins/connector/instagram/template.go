@@ -96,6 +96,10 @@ func dropTemplate(collectionID string) {
 // extractTemplate picks the collection query out of a captured request list.
 // The body is the form-encoded POST payload the page itself sent.
 func extractTemplate(requests []any, collectionID string) (string, error) {
+	// Prefer the paginated "connection" query: the root query caps its page at
+	// 12 posts, the connection honours first=100. Same collection, ten times
+	// fewer round trips.
+	var fallback string
 	for _, raw := range requests {
 		m := asMap(raw)
 		if m == nil {
@@ -114,9 +118,23 @@ func extractTemplate(requests []any, collectionID string) (string, error) {
 		if collectionID != "" && !strings.Contains(body, collectionID) {
 			continue
 		}
-		return body, nil
+		if strings.Contains(body, "_connection") {
+			return body, nil
+		}
+		if fallback == "" {
+			fallback = body
+		}
+	}
+	if fallback != "" {
+		return fallback, nil
 	}
 	return "", fmt.Errorf("no saved-collection GraphQL request was recorded — is the profile logged in, and did the collection page render?")
+}
+
+// captureName is the deterministic record_request name for one collection, so a
+// later get_request reads back exactly what this pass recorded.
+func captureName(collectionID string) string {
+	return "ig_" + sanitize(collectionID)
 }
 
 func sanitize(s string) string {
