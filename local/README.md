@@ -71,21 +71,41 @@ git fetch origin --prune && git fetch upstream --prune
 If `upstream` is absent, the script falls back to `origin` — but with `origin`
 pointing at the fork, that would sync the fork, not the central repo, so keep both.
 
-### CI
+### Hooks (local — no CI minutes)
 
-`.github/workflows/upstream-sync.yml` runs the same merge on a schedule
-(Mondays 01:00 UTC) and on demand:
+GitHub Actions is deliberately **not** used for this. The gate is local:
 
-- merges `upstream/develop` into a throwaway `ci/upstream-sync` branch on top of
-  `master` (never into `master` directly),
-- on conflict, fails and annotates every conflicted file as `seam` or
-  `UNEXPECTED`,
-- on success, builds templ + all SPA bundles + the Go binary, runs the
-  plan/ticket tests, pushes the branch and opens/refreshes a PR.
+```bash
+local/install-hooks.sh        # once per clone
+```
 
-Scheduled workflows on a fork can be disabled by default — enable **Actions** on
-`amed12/wick` once. The token only writes branches and PRs inside the fork; the
-central remote is fetch-only.
+That sets `core.hooksPath=$ROOT/.githooks` and
+`branch.master.mergeOptions=--no-ff`.
+
+`.githooks/pre-merge-commit` then, on any merge into `master`:
+
+1. fetches `upstream/develop` (configurable via `UPSTREAM_REMOTE` /
+   `UPSTREAM_BRANCH`),
+2. allows the merge when its result contains that upstream commit — either
+   `master` already has it, or the branch being merged brings it in,
+3. otherwise aborts and tells you to `git merge --abort` + run
+   `local/sync-upstream.sh`.
+
+Why `pre-merge-commit` and not "pre-merge": Git has no pre-merge hook. It runs
+after the merge is resolved but **before the commit**, which is the last point a
+gate can stop it. `--no-ff` on `master` makes sure it also runs for merges that
+would otherwise fast-forward.
+
+Escape hatches:
+
+```bash
+git merge --no-verify                 # bypass the gate once
+WICK_HOOK_OFFLINE=1 git merge <ref>   # skip the fetch, keep the ancestry check
+```
+
+The build/test check is not in the hook — a full `go build` + SPA build on every
+merge is slower than the merge itself. `local/sync-upstream.sh` runs it after a
+sync, and the shipped `pre-push` hook can be re-enabled if you want it there.
 
 ## Seams — the only files a sync can conflict with
 

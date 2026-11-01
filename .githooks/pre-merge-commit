@@ -1,0 +1,81 @@
+#!/bin/sh
+# LOCAL(hooks): gate merges into our product branches on a fresh upstream.
+#
+# There is no "pre-merge" hook in Git. pre-merge-commit runs once a merge has
+# been resolved and is about to be committed, which is the earliest point we
+# can still stop it. To make sure it also runs for merges that would otherwise
+# fast-forward, local/install-hooks.sh sets:
+#
+#   branch.master.mergeOptions --no-ff
+#
+# Behaviour on a protected branch (default: master):
+#   1. fetch upstream/<branch> (default upstream/develop),
+#   2. allow the merge if its result already contains that upstream commit —
+#      either our branch has it, or the branch being merged does,
+#   3. otherwise abort with the fix.
+#
+# Bypass once:   git merge --no-verify
+# Skip the fetch (offline): WICK_HOOK_OFFLINE=1 git merge ...
+# Configure:     UPSTREAM_REMOTE, UPSTREAM_BRANCH, WICK_PROTECTED_BRANCHES
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$ROOT"
+
+BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+PROTECTED="${WICK_PROTECTED_BRANCHES:-master}"
+case " $PROTECTED " in
+  *" $BRANCH "*) ;;
+  *) exit 0 ;;
+esac
+
+REMOTE="${UPSTREAM_REMOTE:-upstream}"
+TARGET="${UPSTREAM_BRANCH:-develop}"
+TARGET_REF="$REMOTE/$TARGET"
+MERGE_HEAD_SHA="$(git rev-parse -q --verify MERGE_HEAD 2>/dev/null || true)"
+
+# The sync merge itself: local/sync-upstream.sh already fetched, so do not
+# fetch twice.
+if [ -n "$MERGE_HEAD_SHA" ] && [ "$(git rev-parse -q --verify "$TARGET_REF" 2>/dev/null || true)" = "$MERGE_HEAD_SHA" ]; then
+  exit 0
+fi
+
+if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
+  echo "pre-merge: no '$REMOTE' remote — cannot verify freshness (run local/install-hooks.sh)." >&2
+  exit 0
+fi
+
+if [ "${WICK_HOOK_OFFLINE:-0}" != "1" ]; then
+  printf 'pre-merge: fetching %s/%s… ' "$REMOTE" "$TARGET"
+  if ! git fetch --quiet "$REMOTE" "$TARGET"; then
+    echo "FAILED" >&2
+    echo "pre-merge: cannot confirm $TARGET_REF is current. Fix the remote," >&2
+    echo "           or merge with --no-verify / WICK_HOOK_OFFLINE=1." >&2
+    exit 1
+  fi
+  echo "ok"
+fi
+
+TARGET_SHA="$(git rev-parse "$TARGET_REF")"
+
+# The merge is safe when the result will contain upstream: either our branch
+# already has it, or the branch we are merging brings it in.
+if git merge-base --is-ancestor "$TARGET_SHA" HEAD 2>/dev/null; then
+  exit 0
+fi
+if [ -n "$MERGE_HEAD_SHA" ] && git merge-base --is-ancestor "$TARGET_SHA" "$MERGE_HEAD_SHA" 2>/dev/null; then
+  exit 0
+fi
+
+cat >&2 <<EOF
+
+pre-merge: $TARGET_REF has commits that this merge would not contain.
+           Merging now would put local work on a stale upstream.
+
+  git merge --abort
+  local/sync-upstream.sh
+  # then re-run your merge
+
+  (bypass once: git merge --no-verify)
+EOF
+exit 1
