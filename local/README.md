@@ -107,6 +107,24 @@ The build/test check is not in the hook — a full `go build` + SPA build on eve
 merge is slower than the merge itself. `local/sync-upstream.sh` runs it after a
 sync, and the shipped `pre-push` hook can be re-enabled if you want it there.
 
+## The Guzz pilot (localhost:9425)
+
+`localhost:9425` is the **Guzz mac2 pilot**, a Docker container (`guzz-mac2-wick-codex`)
+running through Colima and built from this checkout. It is not a local dev server.
+
+- **Recreate only via** `~/kantor-ai/guzz-agent/deploy/mac2-runtime.sh start`.
+  A raw `docker compose up -d wick-codex` picks up the compose default
+  `WICK_SLACK_CONNECT_ONLY=true` — the bot connects to Slack and stays silent.
+- Verify after a recreate: `printenv WICK_SLACK_CONNECT_ONLY` = `false`, logs show
+  Slack `connected`, `/health` = 200.
+- `deploy/Dockerfile.mac2` applies only `wick-sandbox-ui.patch`; the DM-only
+  patches were removed because that code is now in master.
+- The Guzz bot deliberately **cannot** use wick tools (plans, tickets, notes).
+  `codex-config.mac2.toml` sets `[mcp_servers.wick] enabled = false`. Use the web
+  UI at 9425 for Plans.
+
+Full operational rules: `~/kantor-ai/guzz-agent/AGENTS.md`.
+
 ## Seams — the only files a sync can conflict with
 
 Everything else we add is a new file or directory. `local/seams.txt` lists the
