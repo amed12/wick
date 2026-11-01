@@ -5,8 +5,11 @@
 // metadata flag, downloads the reel, runs whisper.cpp, and writes the transcript
 // onto the card.
 //
-// Media lookup and board writes are delegated to the instagram and planban
-// connectors over the Host API — this plugin owns no browser and no board code.
+// It talks to Planban over plain HTTP and to Instagram via yt-dlp with an
+// exported cookie jar — deliberately NOT through the wick Host API. A job run
+// has no person behind it, so connector calls would need a plugin identity the
+// job runtime does not carry; keeping the job self-contained means it works
+// from a cron tick with no session and no token.
 package main
 
 import (
@@ -14,14 +17,5 @@ import (
 )
 
 func main() {
-	wickplugin.DeclareHostAccess(
-		[]string{wickplugin.ScopeHostConnectorsRead, wickplugin.ScopeHostConnectorsExec},
-		&wickplugin.HostResources{
-			Connectors: []wickplugin.HostConnectorResource{
-				{Connector: "planban", Ops: []string{"find_cards", "write_doc", "set_metadata"}},
-				{Connector: "instagram", Ops: []string{"post"}},
-			},
-		},
-	)
 	wickplugin.ServeJob(Module())
 }
