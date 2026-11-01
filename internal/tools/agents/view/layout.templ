@@ -908,6 +908,15 @@ templ agentsNavIcon(label string) {
 			<svg viewBox="0 0 16 16" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5">
 				<path d="M9 2L3 9h4l-1 5 6-7H8l1-5z" stroke-linejoin="round"></path>
 			</svg>
+		// LOCAL(plans): icon for the planning workspace nav entry.
+		case "Plans":
+			// A route with stops — phases of a plan.
+			<svg viewBox="0 0 16 16" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5">
+				<circle cx="3.5" cy="12.5" r="1.5"></circle>
+				<circle cx="8" cy="7.5" r="1.5"></circle>
+				<circle cx="12.5" cy="3" r="1.5"></circle>
+				<path d="M4.5 11.5l2.5-3M9 6.5l2.5-2" stroke-linecap="round"></path>
+			</svg>
 		case "Connectors":
 			<svg viewBox="0 0 16 16" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5">
 				<circle cx="4" cy="8" r="2"></circle>

@@ -40,6 +40,26 @@ const (
 	StatusDone       = project.StatusDone
 )
 
+// LOCAL(plans): planning fields on the ticket entity. Everything else in
+// this file is upstream's.
+//
+// Ticket kinds. Empty is normalised to KindTask so every ticket written
+// before planning existed reads as ordinary work.
+const (
+	KindTask    = "task"
+	KindFeature = "feature"
+)
+
+// NormalizeKind folds anything unrecognised to task: an unknown kind must
+// never make a ticket disappear from the board, and "task" is what the
+// board has always meant.
+func NormalizeKind(k string) string {
+	if strings.EqualFold(strings.TrimSpace(k), KindFeature) {
+		return KindFeature
+	}
+	return KindTask
+}
+
 // DefaultStatuses is the built-in board order, for callers with no project
 // config to hand (a test fixture, a fallback path). Anything acting on a
 // real project reads cfg.StatusKeys() instead — a project may have renamed
@@ -138,6 +158,25 @@ type Ticket struct {
 	Assignees []string `json:"assignees,omitempty"` // wick user IDs
 	// Fields holds values keyed by project.TicketField.Key.
 	Fields map[string]string `json:"fields,omitempty"`
+	// Kind separates a plain task (the default, and every ticket written
+	// before this field existed) from a feature — the planning-level group
+	// a plan's tasks roll up to. Everything that does not know about plans
+	// can ignore it and keep treating the ticket as work.
+	Kind string `json:"kind,omitempty"`
+	// ParentID names the feature ticket this one belongs to. A feature's
+	// tasks point at it; a feature itself, and every pre-plan ticket, leave
+	// it empty.
+	ParentID string `json:"parent_id,omitempty"`
+	// PlanID names the plan phase that produced this ticket. Empty for
+	// work that exists outside any plan.
+	PlanID string `json:"plan_id,omitempty"`
+	// Acceptance is the done-when contract for the work, markdown. It is a
+	// separate field from Body because an agent reads the body for context
+	// and the acceptance criteria to decide whether it is actually done.
+	Acceptance string `json:"acceptance,omitempty"`
+	// DependsOn lists ticket IDs that must finish first. Advisory for the
+	// board, load-bearing for an agent picking the next task.
+	DependsOn []string `json:"depends_on,omitempty"`
 	// Sessions is the list of record for which sessions belong here.
 	Sessions  []string  `json:"sessions,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -188,6 +227,14 @@ type CreateOptions struct {
 	Assignee  string
 	Assignees []string
 	Fields    map[string]string
+	// Planning fields. Kind defaults to task; a feature carries the group
+	// its tasks point at through ParentID, and PlanID names the phase that
+	// produced it.
+	Kind       string
+	ParentID   string
+	PlanID     string
+	Acceptance string
+	DependsOn  []string
 	// Sessions optionally seeds the session list (used when a ticket is
 	// created from an existing conversation).
 	Sessions []string
@@ -294,16 +341,21 @@ func Create(layout config.Layout, opt CreateOptions) (Ticket, error) {
 	now := time.Now().UTC()
 	write := func(id string) (Ticket, error) {
 		tk := Ticket{
-			ID:        id,
-			ProjectID: opt.ProjectID,
-			Title:     title,
-			Body:      strings.TrimSpace(opt.Body),
-			Status:    status,
-			Fields:    opt.Fields,
-			Sessions:  opt.Sessions,
-			CreatedAt: now,
-			UpdatedAt: now,
-			TouchedAt: now,
+			ID:         id,
+			ProjectID:  opt.ProjectID,
+			Title:      title,
+			Body:       strings.TrimSpace(opt.Body),
+			Status:     status,
+			Fields:     opt.Fields,
+			Kind:       strings.TrimSpace(opt.Kind),
+			ParentID:   strings.TrimSpace(opt.ParentID),
+			PlanID:     strings.TrimSpace(opt.PlanID),
+			Acceptance: strings.TrimSpace(opt.Acceptance),
+			DependsOn:  opt.DependsOn,
+			Sessions:   opt.Sessions,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+			TouchedAt:  now,
 		}
 		tk.SetAssignees(append([]string{opt.Assignee}, opt.Assignees...))
 		if err := os.MkdirAll(layout.TicketDir(opt.ProjectID, id), 0o755); err != nil {
@@ -408,6 +460,11 @@ func (t Ticket) AssigneeList() []string {
 	}
 	return nil
 }
+
+// KindOf returns the ticket's planning kind, folding empty to task. Read
+// this rather than the raw field so a ticket written before the field
+// existed behaves like ordinary work.
+func (t Ticket) KindOf() string { return NormalizeKind(t.Kind) }
 
 // HasAssignee reports whether id is one of the people this ticket is on.
 func (t Ticket) HasAssignee(id string) bool {

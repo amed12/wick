@@ -153,6 +153,23 @@ func (l Layout) TicketFile(projectID, ticketID string) string {
 // directory rather than an array inside ticket.json: notes are edited
 // concurrently by agents, and per-note files mean two writers touching
 // different notes cannot clobber each other.
+// LOCAL(plans): plan storage paths. Upstream owns everything above.
+// PlansDir holds a project's plan documents (`projects/<id>/plans/`).
+// A plan is the PRD + feature/task breakdown for one phase of the project.
+func (l Layout) PlansDir(projectID string) string {
+	return filepath.Join(l.ProjectDir(projectID), "plans")
+}
+
+// PlanDir is the folder for one plan (`projects/<id>/plans/<planID>/`).
+func (l Layout) PlanDir(projectID, planID string) string {
+	return filepath.Join(l.PlansDir(projectID), planID)
+}
+
+// PlanFile is the plan document (`projects/<id>/plans/<planID>/plan.json`).
+func (l Layout) PlanFile(projectID, planID string) string {
+	return filepath.Join(l.PlanDir(projectID, planID), "plan.json")
+}
+
 func (l Layout) TicketNotesDir(projectID, ticketID string) string {
 	return filepath.Join(l.TicketDir(projectID, ticketID), "notes")
 }

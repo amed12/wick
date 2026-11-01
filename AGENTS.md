@@ -72,6 +72,7 @@ Read before touching the subsystem each one covers. They reference real paths in
 this repo, so they only make sense with the repo checked out.
 
 - `tool-module` — any work under `internal/tools/{tool}/` **or** `internal/jobs/{job}/`. Covers both surfaces — they share the same Config reflection, `wick:"..."` tag grammar, and bootstrap contract.
+- `plan-module` — the planning workspace: `internal/agents/plan`, the `/tools/agents/plan` SPA, the `plans` connector, and the ticket `Kind`/`ParentID`/`PlanID` fields. Read before changing how a PRD becomes features and tasks.
 - `connector-module` — any work under `internal/connectors/{connector}/` or anything that touches the MCP surface (`internal/mcp/`).
 - `plugin-module` — packaging a connector as an external plugin binary (the `plugins` monorepo, `wick plugin build`, catalog, signing).
 - `workflow-node-module` — any work on a workflow node executor under `internal/agents/workflow/nodes/`.

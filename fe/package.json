@@ -24,6 +24,7 @@
     "dev:agent-profiles": "npm --workspace=@wick-fe/agents-agent-profiles run dev",
     "dev:presets": "npm --workspace=@wick-fe/agents-presets run dev",
     "dev:project-settings": "npm --workspace=@wick-fe/agents-project-settings run dev",
+    "dev:plan": "npm --workspace=@wick-fe/agents-plan run dev",
     "dev:providers": "npm --workspace=@wick-fe/agents-providers run dev",
     "dev:airouter": "npm --workspace=@wick-fe/agents-airouter run dev",
     "dev:shell": "npm --workspace=@wick-fe/agents-shell run dev",
