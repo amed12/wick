@@ -1,0 +1,7 @@
+# Keep the build context small. The Dockerfile's frontend stage runs npm ci,
+# and `git apply` works outside a repository, so .git is not needed either.
+fe/node_modules
+**/node_modules
+.git
+bin
+local
