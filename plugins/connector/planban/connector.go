@@ -114,7 +114,7 @@ func Module() connector.Module {
 					"Replace a card's spec or plan document with new markdown. Use it to attach an analysis (transcript, notes) to the card so the board carries the evidence.",
 					writeDocInput{}, handleWriteDoc, wickdocs.Docs{}),
 				connector.OpDestructive("delete_card", "Delete Card",
-					"Permanently delete a card. Irreversible — the card's notes stay on disk but the board entry is gone. Disabled by default on every new instance.",
+					"Permanently delete a card. Archives it first when needed (Planban only deletes archived cards), then removes it. Irreversible — notes on disk survive, the board entry does not.",
 					deleteCardInput{}, handleDeleteCard, wickdocs.Docs{}),
 			),
 		},

@@ -329,7 +329,18 @@ func handleDeleteCard(c *connector.Ctx) (any, error) {
 	if id == "" {
 		return nil, fmt.Errorf("card_id is required")
 	}
-	if err := cl.deleteCard(repo, id); err != nil {
+	err = cl.deleteCard(repo, id)
+	if err != nil && strings.Contains(err.Error(), "Only archived cards can be deleted") {
+		// Planban only deletes archived cards. Archive, then delete, so the op
+		// means what its name says instead of surfacing an internal rule.
+		if _, mErr := cl.moveCard(repo, id, map[string]any{"status": "archived"}); mErr != nil {
+			return nil, fmt.Errorf("archive before delete: %w", mErr)
+		}
+		if err = cl.deleteCard(repo, id); err != nil {
+			return nil, err
+		}
+	}
+	if err != nil {
 		return nil, err
 	}
 	return map[string]any{"board": repo, "deleted": true, "card_id": id}, nil

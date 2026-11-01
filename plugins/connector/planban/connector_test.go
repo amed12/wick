@@ -126,6 +126,13 @@ func (f *fakeBoard) handler(t *testing.T) http.Handler {
 
 		case r.Method == http.MethodDelete && strings.HasPrefix(rest, "cards/"):
 			id := strings.TrimPrefix(rest, "cards/")
+			// Mirrors Planban: only archived cards may be deleted.
+			for _, c := range f.cards {
+				if c.ID == id && c.Status != "archived" {
+					http.Error(w, `{"error":"Only archived cards can be deleted."}`, http.StatusConflict)
+					return
+				}
+			}
 			kept := f.cards[:0]
 			for _, c := range f.cards {
 				if c.ID != id {
@@ -255,11 +262,12 @@ func TestFindCardsByShortcodeAndStatus(t *testing.T) {
 	}
 }
 
-func TestDeleteCardRemovesIt(t *testing.T) {
+func TestDeleteCardArchivesThenDeletes(t *testing.T) {
 	board := &fakeBoard{cards: []card{{ID: "gone", Title: "Hapus", Status: "pending"}}}
 	srv := httptest.NewServer(board.handler(t))
 	defer srv.Close()
 
+	// A pending card must be archived first; the connector handles that itself.
 	if _, err := handleDeleteCard(newCtx(t, srv, map[string]string{"card_id": "gone"})); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
