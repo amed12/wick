@@ -85,6 +85,10 @@ func Module() connector.Module {
 			Name:        "Planban",
 			Description: "Read and write cards on a local Planban board: list groups, find cards, upsert by external id, move between groups, delete.",
 			Icon:        "🗂️",
+			// One board server per wick; the board itself is chosen by repo_id.
+			// Fixed makes the host seed exactly one instance at registration, so a
+			// freshly installed plugin is usable without an admin clicking "+ New".
+			Fixed:       true,
 			DefaultTags: []entity.DefaultTag{tags.Connector, tags.API, tags.Development},
 		},
 		Configs: entity.StructToConfigs(Config{}),
