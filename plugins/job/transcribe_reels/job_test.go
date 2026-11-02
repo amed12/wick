@@ -5,7 +5,37 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/yogasw/wick/pkg/entity"
 )
+
+// TestConfigKeysMatchWhatRunReads pins the config keys this job reads through
+// job.Cfg. FFmpegBin used to snake-case to "f_fmpeg_bin" (two leading capitals
+// look like an acronym boundary), while Run reads "ffmpeg_bin" — so the path an
+// operator typed in the Jobs page was silently ignored and the hard-coded
+// fallback ran instead.
+func TestConfigKeysMatchWhatRunReads(t *testing.T) {
+	have := map[string]bool{}
+	for _, c := range Module().Configs {
+		have[c.Key] = true
+	}
+	for _, want := range []string{"board_url", "board_repo", "ffmpeg_bin", "yt_dlp", "whisper_bin", "model_path", "meta_key", "meta_value"} {
+		if !have[want] {
+			t.Errorf("config %q missing; Module().Configs keys = %v", want, keysOf(Module().Configs))
+		}
+	}
+	if have["f_fmpeg_bin"] {
+		t.Errorf("config key f_fmpeg_bin still derived; Run reads ffmpeg_bin, so pin it with key=ffmpeg_bin")
+	}
+}
+
+func keysOf(cfgs []entity.Config) []string {
+	out := make([]string, 0, len(cfgs))
+	for _, c := range cfgs {
+		out = append(out, c.Key)
+	}
+	return out
+}
 
 func TestSafeNameStripsPathCharacters(t *testing.T) {
 	if got := safeName("../../etc/passwd"); got == "" || got == "../../etc/passwd" {

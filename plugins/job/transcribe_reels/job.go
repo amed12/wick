@@ -29,7 +29,7 @@ type Config struct {
 	WhisperBin string `wick:"required;default=/Users/achmadfathullah/ig-tools/tools/whisper.cpp/build/bin/whisper-cli;desc=whisper.cpp CLI binary."`
 	ModelPath  string `wick:"required;default=/Users/achmadfathullah/ig-tools/models/ggml-small.bin;desc=ggml model file. small is the quality/speed sweet spot."`
 	Language   string `wick:"desc=Spoken language forced for transcription (id, en, …). Empty = auto-detect, which is the right default for a mixed library."`
-	FFmpegBin  string `wick:"default=ffmpeg;desc=ffmpeg binary used to convert the download to 16 kHz mono wav."`
+	FFmpegBin  string `wick:"key=ffmpeg_bin;default=ffmpeg;desc=ffmpeg binary used to convert the download to 16 kHz mono wav."`
 	MaxPerRun  int    `wick:"default=2;desc=How many reels one run processes. Keep it low: each minute of audio costs ~40s of CPU."`
 	WorkDir    string `wick:"desc=Scratch directory for downloads. Default: the plugin data dir."`
 }
