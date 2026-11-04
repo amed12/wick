@@ -71,7 +71,7 @@
   import type { AgentMessageItem, IncidentSummary, SubAgentItem, TeamTaskItem } from "../types/agents.js";
   import {
     listWorkspace, addWorkspace, saveWorkspaceConfig, testWorkspace,
-    duplicateWorkspace, renameWorkspace, removeWorkspace,
+    duplicateWorkspace, renameWorkspace, removeWorkspace, setWorkspaceExpiry,
   } from "../api/workspace.js";
   import { listSchedules, createSchedule, cancelSchedule, pauseSchedule, resumeSchedule, rescheduleSchedule, runScheduleNow, testWatchSteps } from "../api/schedules.js";
   import { listNotes } from "../api/tickets.js";
@@ -907,6 +907,11 @@
   // provider instance's own default model applies.
   let activeModelID = $state("");
   let activeProjectId = $state<string | null>(null);
+  // Sub-agent roles are edited where they are scoped: the project's
+  // Sub-agents tab, or the global roles page for a chat with no project.
+  const rolesHref = $derived(
+    activeProjectId ? `${base}/projects/${encodeURIComponent(activeProjectId)}?tab=subagents` : `${base}/agent-profiles`,
+  );
 
   /* ── approval error state ─────────────────────────────────────── */
   let approvalError = $state("");
@@ -3769,6 +3774,7 @@
           {teamTasks}
           teamAgents={teamAgentsByHandle}
           onOpenAgent={agentMode?.agent ? openTeamAgent : undefined}
+          {rolesHref}
         />
       {:else if railTab === "workspace"}
         <WorkspacePanel
@@ -3807,6 +3813,11 @@
             run(removeWorkspace(base, sessionId, cid).pipe(Effect.provide(WickClientLayer)))
               .then(loadWorkspace)
               .catch((e: unknown) => toastError(`Remove: ${e instanceof Error ? e.message : String(e)}`));
+          }}
+          onExpiry={(cid, lifetime) => {
+            run(setWorkspaceExpiry(base, sessionId, cid, lifetime).pipe(Effect.provide(WickClientLayer)))
+              .then(loadWorkspace)
+              .catch((e: unknown) => toastError(`Expiry: ${e instanceof Error ? e.message : String(e)}`));
           }}
         />
       {:else if railTab === "scheduled"}
@@ -3995,6 +4006,7 @@
               {teamTasks}
               teamAgents={teamAgentsByHandle}
               onOpenAgent={agentMode?.agent ? openTeamAgent : undefined}
+              {rolesHref}
             />
           {:else if railTab === "workspace"}
             <WorkspacePanel
@@ -4033,6 +4045,11 @@
                 run(removeWorkspace(base, sessionId, cid).pipe(Effect.provide(WickClientLayer)))
                   .then(loadWorkspace)
                   .catch((e: unknown) => toastError(`Remove: ${e instanceof Error ? e.message : String(e)}`));
+              }}
+              onExpiry={(cid, lifetime) => {
+                run(setWorkspaceExpiry(base, sessionId, cid, lifetime).pipe(Effect.provide(WickClientLayer)))
+                  .then(loadWorkspace)
+                  .catch((e: unknown) => toastError(`Expiry: ${e instanceof Error ? e.message : String(e)}`));
               }}
             />
           {:else if railTab === "scheduled"}
@@ -4268,6 +4285,7 @@
     row={selectedSubAgentRow}
     onClose={() => { selectedSubAgent = null; }}
     onChanged={loadSubAgents}
+    {rolesHref}
   />
 {/if}
 

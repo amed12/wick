@@ -389,6 +389,18 @@ type Channel struct {
 	listenDispatchHook func(sessionID string, ev *slackevents.MessageEvent, waited time.Duration, others bool)
 	// heldFn records where a held reply stands for the web UI (SetHeldFn).
 	heldFn HeldFn
+	// heardFn records each reply a listening thread hears (SetHeardFn).
+	heardFn HeldFn
+	// heardNames caches the display names heardName looked up (guarded by
+	// userDisplayMu), apart from userDisplayCache: no wick mapping here.
+	heardNames map[string]string
+	// heardWick caches heardWickUser's answers, same guard.
+	heardWick map[string]string
+	// listenBotRuns counts, per session, the listening turns in a row that
+	// only bot replies started (listenBotStreak), guarded by mu.
+	listenBotRuns map[string]int
+	// working is where each session's ⏳ sits while its turn runs.
+	working map[string]workingMark
 
 	// userTokenCache maps Slack user ID → resolved xoxp token.
 	// Avoids repeated connectorToken lookups on every send call.
@@ -1839,14 +1851,20 @@ func (s *Channel) handleEventsAPI(ctx context.Context, outer slackevents.EventsA
 					s.handleMessage(ctx, ev, nil)
 					return
 				}
-				// Another bot answering in a listening thread is read, never
-				// answered: it only tells a held reply that someone spoke.
+				// Another bot replying in a listening thread goes through
+				// listen like a person's reply: it is often part of the
+				// information (a form, a status) or an answer meant for this
+				// agent without a mention, so the agent hears it and decides.
+				// queueListenMessage caps turns that only bots start.
 				if ev.ThreadTimeStamp != "" && ev.ThreadTimeStamp != ev.TimeStamp {
-					author := ev.BotID
-					if author == "" {
-						author = ev.User
+					sid := s.sessionKey(ev.ThreadTimeStamp)
+					if s.listening(sid, ev.Channel) {
+						var files []slackgo.File
+						if ev.Message != nil {
+							files = ev.Message.Files
+						}
+						s.queueListenMessage(ctx, sid, ev, files)
 					}
-					s.noteListenOther(s.sessionKey(ev.ThreadTimeStamp), author)
 				}
 				return
 			}
@@ -2602,14 +2620,20 @@ func (s *Channel) handleMessage(ctx context.Context, ev *slackevents.MessageEven
 	// the listen path itself (a mention) answers now, so a reply held for
 	// the delay would only repeat it.
 	listenT, isListen := listenTurnFrom(ctx)
+	// listeningThread: a mention in a thread the agent listens to. Such a
+	// turn always reads the thread back (threadCatchUpOn), so the replies
+	// it heard but never answered — a held one included — are not lost.
+	listeningThread := false
 	if !dmMain && ev.ChannelType != "im" && ev.ChannelType != "mpim" && ev.TimeStamp != threadTS {
-		if isStopCommand(ev.Text) && s.listening(sessionID, ev.Channel) {
+		listening := s.listening(sessionID, ev.Channel)
+		if isStopCommand(ev.Text) && listening {
 			s.ListenOff(sessionID, ev.Channel, threadTS, "stop word from "+ev.User, false)
 			s.postReply(ev.Channel, threadTS, "Oke, aku berhenti mendengarkan thread ini. Pasang 🤖 lagi atau minta aku listen kalau perlu.")
 			return
 		}
 		if !isListen {
-			s.cancelListenWait(sessionID)
+			listeningThread = listening
+			s.mergeListenWait(sessionID)
 		}
 	}
 
@@ -2780,7 +2804,7 @@ func (s *Channel) handleMessage(ctx context.Context, ev *slackevents.MessageEven
 			userText = block + "\n\n" + userText
 		}
 		s.persistThreadBindingSeen(sessionID, ev.Channel, threadTS, now)
-	} else if !dmMain && ev.ChannelType != "im" && ev.TimeStamp != threadTS && cfg.ThreadCatchUpEnabled {
+	} else if !dmMain && ev.ChannelType != "im" && ev.TimeStamp != threadTS && threadCatchUpOn(cfg.ThreadCatchUpEnabled, listeningThread) {
 		// An existing thread session only wakes on a mention or the 🤖
 		// switch: open the turn with what people said in between. A new
 		// session gets buildSessionContext instead (thread metadata, not
@@ -3758,6 +3782,7 @@ func (s *Channel) OnAgentEvent(sessionKey string, ev event.AgentEvent) {
 		}
 		s.stopStatusAnimation(t)
 		s.stopEditTicker(t)
+		defer s.clearWorking(sessionKey)
 		text = t.buf.String()
 		if !liveStreamText {
 			text = t.replyText()
@@ -3803,6 +3828,7 @@ func (s *Channel) OnAgentEvent(sessionKey string, ev event.AgentEvent) {
 		s.startBackgroundBanner(sessionKey)
 
 	case event.Error:
+		defer s.clearWorking(sessionKey)
 		s.mu.Lock()
 		t := s.turns[sessionKey]
 		held := false

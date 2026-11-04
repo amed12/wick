@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/yogasw/wick/internal/connectors"
 	"github.com/yogasw/wick/internal/enc"
 	"github.com/yogasw/wick/internal/entity"
@@ -749,6 +750,25 @@ func (s *Service) markPerUser(ctx context.Context, instanceID string) error {
 	return nil
 }
 
+// loadPerUserMarker declares the marker row of an SSO instance so its
+// stored value reaches the configs cache. The cache only holds declared
+// rows, and token-scheme modules declare the marker only once it reads
+// "1" — after a restart nothing loaded it, so per-user mode looked off.
+// Once per instance per process.
+func (s *Service) loadPerUserMarker(ctx context.Context, row entity.Connector) {
+	if !row.EnableSSO || s.keys == nil {
+		return
+	}
+	if _, done := s.markerLoaded.LoadOrStore(row.ID, true); done {
+		return
+	}
+	marker := DefField{Key: cfgOAuthPerUser, Hidden: true, Desc: "Per-user (SSO) mode marker (managed automatically)."}
+	if err := s.keys.EnsureOwned(ctx, "connector:"+row.ID, FieldsToConfigs([]DefField{marker})...); err != nil {
+		s.markerLoaded.Delete(row.ID)
+		log.Warn().Err(err).Str("instance", row.ID).Msg("load per-user marker")
+	}
+}
+
 // InstancePerUser reports whether an oauth MCP instance runs in per-user
 // (SSO) mode: Enable SSO on AND the per-user marker set. A legacy
 // per-instance-token row with Enable SSO flipped on keeps its own token.
@@ -765,6 +785,12 @@ func (s *Service) saveAccountTokens(ctx context.Context, instanceID, wickUserID,
 	if label == "" {
 		label = wickUserID
 	}
+	return s.saveAccountTokensAs(ctx, instanceID, wickUserID, label, label, t)
+}
+
+// saveAccountTokensAs is saveAccountTokens with an explicit external id —
+// the account slot the upsert replaces.
+func (s *Service) saveAccountTokensAs(ctx context.Context, instanceID, wickUserID, externalID, label string, t *oauthTokens) error {
 	row, err := s.conns.Get(ctx, instanceID)
 	if err != nil {
 		return err
@@ -792,7 +818,7 @@ func (s *Service) saveAccountTokens(ctx context.Context, instanceID, wickUserID,
 		e := t.ExpiresAt
 		exp = &e
 	}
-	if err := s.conns.SaveAccountTokens(ctx, instanceID, wickUserID, label, label, t.AccessToken, refresh, exp); err != nil {
+	if err := s.conns.SaveAccountTokens(ctx, instanceID, wickUserID, externalID, label, t.AccessToken, refresh, exp); err != nil {
 		return fmt.Errorf("save account: %w", err)
 	}
 	return nil
